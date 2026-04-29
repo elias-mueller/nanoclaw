@@ -57,6 +57,16 @@ export const CLAIM_STUCK_MS = 60 * 1000;
 const MAX_TRIES = 5;
 const BACKOFF_BASE_MS = 5000;
 
+// SQLite's datetime('now') yields "YYYY-MM-DD HH:MM:SS" in UTC with no zone
+// suffix. Date.parse treats that as local time — on a non-UTC host it then
+// reads as UTC ± offset, which makes fresh claims look hours stale and the
+// claim-stuck killer fires immediately on long-bootstrap providers like codex.
+function parseSqliteUtc(s: string): number {
+  if (!s) return NaN;
+  if (s.includes('T') || s.endsWith('Z')) return Date.parse(s);
+  return Date.parse(s.replace(' ', 'T') + 'Z');
+}
+
 export type StuckDecision =
   | { action: 'ok' }
   | { action: 'kill-ceiling'; heartbeatAgeMs: number; ceilingMs: number }
@@ -94,7 +104,7 @@ export function decideStuckAction(args: {
 
   const tolerance = Math.max(CLAIM_STUCK_MS, declaredBashMs ?? 0);
   for (const claim of claims) {
-    const claimedAt = Date.parse(claim.status_changed);
+    const claimedAt = parseSqliteUtc(claim.status_changed);
     if (Number.isNaN(claimedAt)) continue;
     const claimAge = now - claimedAt;
     if (claimAge <= tolerance) continue;
@@ -262,7 +272,7 @@ function resetStuckProcessingRows(
     // Already rescheduled for a future retry — don't bump tries again. The
     // wake path (sweep step 2) will fire when process_after elapses and a
     // fresh container will clean the orphan claim on startup.
-    if (msg.processAfter && Date.parse(msg.processAfter) > now) continue;
+    if (msg.processAfter && parseSqliteUtc(msg.processAfter) > now) continue;
 
     if (msg.tries >= MAX_TRIES) {
       markMessageFailed(inDb, msg.id);
