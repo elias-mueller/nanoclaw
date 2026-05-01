@@ -281,7 +281,7 @@ export class ClaudeProvider implements AgentProvider {
         disallowedTools: SDK_DISALLOWED_TOOLS,
         env: this.env,
         model: 'claude-opus-4-7',
-        effort: 'xhigh',
+        effort: 'max',
         thinking: { type: 'adaptive' },
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
